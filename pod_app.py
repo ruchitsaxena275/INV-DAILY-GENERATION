@@ -1,12 +1,12 @@
 # save as app.py
 import streamlit as st
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- CONFIG -----------------
-# List all 80 inverter IPs explicitly
+# List of inverter IPs
 IPS = [
     "10.22.250.2", "10.22.250.3", "10.22.250.4", "10.22.250.5",
     "10.22.250.6", "10.22.250.7", "10.22.250.8", "10.22.250.9",
@@ -30,35 +30,42 @@ IPS = [
     "10.22.250.78", "10.22.250.79", "10.22.250.80", "10.22.250.81"
 ]
 
-MAX_THREADS = 20  # Parallel requests
-
 # ----------------- FUNCTION TO FETCH DATA -----------------
-def fetch_inverter_yield(ip):
-    """Fetch daily yield from a single inverter."""
+def get_inverter_yield(ip):
+    """Open inverter page with Selenium and capture the daily yield"""
+    options = Options()
+    options.headless = True  # runs in background
+    driver = webdriver.Chrome(options=options)  # make sure chromedriver is installed
     try:
-        r = requests.get(f"http://{ip}", timeout=5)  # 5 sec timeout
-        soup = BeautifulSoup(r.text, "html.parser")
-        value = soup.find("label", class_="top_num").text
-        return {"IP": ip, "DailyYield": value}
-    except Exception as e:
-        return {"IP": ip, "DailyYield": "Error"}
-
-def fetch_all_inverters(ips):
-    """Fetch data from all inverters in parallel."""
-    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-        results = list(executor.map(fetch_inverter_yield, ips))
-    return results
+        driver.get(f"http://{ip}")
+        # Adjust selector if your label class is different
+        element = driver.find_element(By.CSS_SELECTOR, "label.top_num")
+        value = element.text
+        driver.quit()
+        return value
+    except:
+        driver.quit()
+        return "Error"
 
 # ----------------- STREAMLIT UI -----------------
-st.set_page_config(page_title="Inverter Daily Yield", layout="wide")
-st.title("Solar Plant Inverter Daily Yield Tracker")
+st.set_page_config(page_title="Inverter Dashboard", layout="wide")
+st.title("Solar Plant Inverter Daily Yield Dashboard")
 
-if st.button("Refresh Data"):
-    with st.spinner("Fetching data from inverters..."):
-        data = fetch_all_inverters(IPS)
-        df = pd.DataFrame(data)
-        st.success("Data fetched successfully!")
-        st.dataframe(df)
-        # Optional: export to Excel
-        df.to_excel("daily_yield.xlsx", index=False)
-        st.info("Excel saved as daily_yield.xlsx")
+# Manual inverter selection
+selected_ip = st.selectbox("Select Inverter IP:", IPS)
+
+if st.button(f"Fetch Data for {selected_ip}"):
+    with st.spinner(f"Fetching data from {selected_ip}..."):
+        daily_yield = get_inverter_yield(selected_ip)
+        st.success(f"Daily Yield for {selected_ip}: {daily_yield}")
+
+# Optional: store fetched data in a table
+if 'data' not in st.session_state:
+    st.session_state.data = []
+
+if st.button("Add to Table"):
+    st.session_state.data.append({"IP": selected_ip, "DailyYield": daily_yield})
+    df = pd.DataFrame(st.session_state.data)
+    st.dataframe(df)
+    df.to_excel("manual_yield.xlsx", index=False)
+    st.info("Excel saved as manual_yield.xlsx")
