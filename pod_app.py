@@ -1,9 +1,10 @@
 import streamlit as st
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-# List of inverter IPs
-inverter_ips = [
+# ----------------- IPs -----------------
+ips = [
     '10.22.250.2','10.22.250.3','10.22.250.4','10.22.250.5',
     '10.22.250.13','10.22.250.14','10.22.250.15','10.22.250.16',
     '10.22.250.24','10.22.250.25','10.22.250.26','10.22.250.27',
@@ -26,28 +27,44 @@ inverter_ips = [
     '10.22.250.211','10.22.250.212','10.22.250.213','10.22.250.214'
 ]
 
-def fetch_export_value(ip):
-    url = f'http://{ip}'
+# ----------------- Prepare DataFrame -----------------
+data_list = []
+for i in range(20):  # 20 ITCs
+    for j in range(4):  # 4 inverters per ITC
+        idx = i*4 + j
+        data_list.append({
+            "ITC": f"ITC-{i+1}",
+            "Inverter": f"INV-{j+1}",
+            "IP": ips[idx],
+            "Export_kW": None
+        })
+
+df = pd.DataFrame(data_list)
+
+# ----------------- Scraping Function -----------------
+def fetch_export(ip):
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(f"http://{ip}", timeout=2)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        span = soup.find('span', class_='label_top_num')
-        if span:
-            return span.text.strip()
-        return 'N/A'
+        soup = BeautifulSoup(response.text, "html.parser")
+        value = soup.find("label", class_="top_num").text
+        return float(value)
     except Exception as e:
-        return 'Error'
+        return None
 
-st.title('Inverter Export Values')
+# ----------------- Streamlit UI -----------------
+st.title("Solar Inverter Export Dashboard")
 
-if st.button('Fetch Values'):
-    data = []
-    for i, ip in enumerate(inverter_ips):
-        itc = f'ITC-{i // 4 + 1}'
-        inverter = f'Inverter-{i % 4 + 1}'
-        value = fetch_export_value(ip)
-        data.append({'ITC': itc, 'Inverter': inverter, 'IP': ip, 'Export Value': value})
-    st.table(data)
-else:
-    st.write('Click Fetch Values button to fetch inverter data.')
+if st.button("Refresh Data"):
+    for idx, row in df.iterrows():
+        df.at[idx, "Export_kW"] = fetch_export(row["IP"])
+    st.success("Data Updated!")
+
+# Display Inverter Table
+st.subheader("Inverter-wise Export (kW)")
+st.dataframe(df)
+
+# ITC Summary
+itc_summary = df.groupby("ITC")["Export_kW"].sum().reset_index()
+st.subheader("ITC Total Export (kW)")
+st.dataframe(itc_summary)
