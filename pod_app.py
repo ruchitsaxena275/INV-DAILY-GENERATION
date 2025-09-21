@@ -1,5 +1,8 @@
 import streamlit as st
+import requests
+from bs4 import BeautifulSoup
 
+# List of inverter IPs
 inverter_ips = [
     '10.22.250.2','10.22.250.3','10.22.250.4','10.22.250.5',
     '10.22.250.13','10.22.250.14','10.22.250.15','10.22.250.16',
@@ -23,14 +26,28 @@ inverter_ips = [
     '10.22.250.211','10.22.250.212','10.22.250.213','10.22.250.214'
 ]
 
-st.title("Inverter Export Value Dashboard")
+def fetch_export_value(ip):
+    url = f'http://{ip}'
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        span = soup.find('span', class_='label_top_num')
+        if span:
+            return span.text.strip()
+        return 'N/A'
+    except Exception as e:
+        return 'Error'
 
-data = []
-for i, ip in enumerate(inverter_ips):
-    itc = f"ITC-{i // 4 + 1}"
-    inv = f"Inverter-{i % 4 + 1}"
-    value = st.text_input(f"Enter export value for {itc} {inv} ({ip})")
-    data.append({"ITC": itc, "Inverter": inv, "IP": ip, "Export Value": value})
+st.title('Inverter Export Values')
 
-st.write("### Export Values Table")
-st.table(data)
+if st.button('Fetch Values'):
+    data = []
+    for i, ip in enumerate(inverter_ips):
+        itc = f'ITC-{i // 4 + 1}'
+        inverter = f'Inverter-{i % 4 + 1}'
+        value = fetch_export_value(ip)
+        data.append({'ITC': itc, 'Inverter': inverter, 'IP': ip, 'Export Value': value})
+    st.table(data)
+else:
+    st.write('Click Fetch Values button to fetch inverter data.')
