@@ -1,70 +1,64 @@
+# save as app.py
 import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor
 
-# ----------------- IPs -----------------
-ips = [
-    '10.22.250.2','10.22.250.3','10.22.250.4','10.22.250.5',
-    '10.22.250.13','10.22.250.14','10.22.250.15','10.22.250.16',
-    '10.22.250.24','10.22.250.25','10.22.250.26','10.22.250.27',
-    '10.22.250.35','10.22.250.36','10.22.250.37','10.22.250.38',
-    '10.22.250.46','10.22.250.47','10.22.250.48','10.22.250.49',
-    '10.22.250.57','10.22.250.58','10.22.250.59','10.22.250.60',
-    '10.22.250.68','10.22.250.69','10.22.250.70','10.22.250.71',
-    '10.22.250.79','10.22.250.80','10.22.250.81','10.22.250.82',
-    '10.22.250.90','10.22.250.91','10.22.250.92','10.22.250.93',
-    '10.22.250.101','10.22.250.102','10.22.250.103','10.22.250.104',
-    '10.22.250.112','10.22.250.113','10.22.250.114','10.22.250.115',
-    '10.22.250.123','10.22.250.124','10.22.250.125','10.22.250.126',
-    '10.22.250.134','10.22.250.135','10.22.250.136','10.22.250.137',
-    '10.22.250.145','10.22.250.146','10.22.250.147','10.22.250.148',
-    '10.22.250.156','10.22.250.157','10.22.250.158','10.22.250.159',
-    '10.22.250.167','10.22.250.168','10.22.250.169','10.22.250.170',
-    '10.22.250.178','10.22.250.179','10.22.250.180','10.22.250.181',
-    '10.22.250.189','10.22.250.190','10.22.250.191','10.22.250.192',
-    '10.22.250.200','10.22.250.201','10.22.250.202','10.22.250.203',
-    '10.22.250.211','10.22.250.212','10.22.250.213','10.22.250.214'
+# ----------------- CONFIG -----------------
+# List all 80 inverter IPs explicitly
+IPS = [
+    "10.22.250.2", "10.22.250.3", "10.22.250.4", "10.22.250.5",
+    "10.22.250.6", "10.22.250.7", "10.22.250.8", "10.22.250.9",
+    "10.22.250.10", "10.22.250.11", "10.22.250.12", "10.22.250.13",
+    "10.22.250.14", "10.22.250.15", "10.22.250.16", "10.22.250.17",
+    "10.22.250.18", "10.22.250.19", "10.22.250.20", "10.22.250.21",
+    "10.22.250.22", "10.22.250.23", "10.22.250.24", "10.22.250.25",
+    "10.22.250.26", "10.22.250.27", "10.22.250.28", "10.22.250.29",
+    "10.22.250.30", "10.22.250.31", "10.22.250.32", "10.22.250.33",
+    "10.22.250.34", "10.22.250.35", "10.22.250.36", "10.22.250.37",
+    "10.22.250.38", "10.22.250.39", "10.22.250.40", "10.22.250.41",
+    "10.22.250.42", "10.22.250.43", "10.22.250.44", "10.22.250.45",
+    "10.22.250.46", "10.22.250.47", "10.22.250.48", "10.22.250.49",
+    "10.22.250.50", "10.22.250.51", "10.22.250.52", "10.22.250.53",
+    "10.22.250.54", "10.22.250.55", "10.22.250.56", "10.22.250.57",
+    "10.22.250.58", "10.22.250.59", "10.22.250.60", "10.22.250.61",
+    "10.22.250.62", "10.22.250.63", "10.22.250.64", "10.22.250.65",
+    "10.22.250.66", "10.22.250.67", "10.22.250.68", "10.22.250.69",
+    "10.22.250.70", "10.22.250.71", "10.22.250.72", "10.22.250.73",
+    "10.22.250.74", "10.22.250.75", "10.22.250.76", "10.22.250.77",
+    "10.22.250.78", "10.22.250.79", "10.22.250.80", "10.22.250.81"
 ]
 
-# ----------------- Prepare DataFrame -----------------
-data_list = []
-for i in range(20):  # 20 ITCs
-    for j in range(4):  # 4 inverters per ITC
-        idx = i*4 + j
-        data_list.append({
-            "ITC": f"ITC-{i+1}",
-            "Inverter": f"INV-{j+1}",
-            "IP": ips[idx],
-            "Export_kW": None
-        })
+MAX_THREADS = 20  # Parallel requests
 
-df = pd.DataFrame(data_list)
-
-# ----------------- Scraping Function -----------------
-def fetch_export(ip):
+# ----------------- FUNCTION TO FETCH DATA -----------------
+def fetch_inverter_yield(ip):
+    """Fetch daily yield from a single inverter."""
     try:
-        response = requests.get(f"http://{ip}", timeout=2)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        r = requests.get(f"http://{ip}", timeout=5)  # 5 sec timeout
+        soup = BeautifulSoup(r.text, "html.parser")
         value = soup.find("label", class_="top_num").text
-        return float(value)
+        return {"IP": ip, "DailyYield": value}
     except Exception as e:
-        return None
+        return {"IP": ip, "DailyYield": "Error"}
 
-# ----------------- Streamlit UI -----------------
-st.title("Solar Inverter Export Dashboard")
+def fetch_all_inverters(ips):
+    """Fetch data from all inverters in parallel."""
+    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+        results = list(executor.map(fetch_inverter_yield, ips))
+    return results
+
+# ----------------- STREAMLIT UI -----------------
+st.set_page_config(page_title="Inverter Daily Yield", layout="wide")
+st.title("Solar Plant Inverter Daily Yield Tracker")
 
 if st.button("Refresh Data"):
-    for idx, row in df.iterrows():
-        df.at[idx, "Export_kW"] = fetch_export(row["IP"])
-    st.success("Data Updated!")
-
-# Display Inverter Table
-st.subheader("Inverter-wise Export (kW)")
-st.dataframe(df)
-
-# ITC Summary
-itc_summary = df.groupby("ITC")["Export_kW"].sum().reset_index()
-st.subheader("ITC Total Export (kW)")
-st.dataframe(itc_summary)
+    with st.spinner("Fetching data from inverters..."):
+        data = fetch_all_inverters(IPS)
+        df = pd.DataFrame(data)
+        st.success("Data fetched successfully!")
+        st.dataframe(df)
+        # Optional: export to Excel
+        df.to_excel("daily_yield.xlsx", index=False)
+        st.info("Excel saved as daily_yield.xlsx")
