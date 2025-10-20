@@ -97,7 +97,7 @@ st.write("You can edit DC capacities below if needed. These are saved only for t
 
 df_caps = st.session_state['capacities_df'].copy()
 # Show editable capacities table
-edited_caps = st.experimental_data_editor(df_caps, num_rows="dynamic")
+edited_caps = st.data_editor(df_caps, num_rows="dynamic")
 st.session_state['capacities_df'] = edited_caps
 
 st.markdown("---")
@@ -139,7 +139,7 @@ working_df = working_df[editable_cols]
 working_df['gii_kwh_m2'] = pd.to_numeric(working_df['gii_kwh_m2'], errors='coerce')
 working_df['generated_mwh'] = pd.to_numeric(working_df['generated_mwh'], errors='coerce')
 
-edited_working = st.experimental_data_editor(working_df, num_rows='dynamic')
+edited_working = st.data_editor(working_df, num_rows='dynamic')
 
 # Calculation
 st.markdown("---")
